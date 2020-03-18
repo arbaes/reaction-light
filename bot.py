@@ -33,6 +33,9 @@ from discord.ext import commands, tasks
 
 from core import database, migration, activity, github, schema
 
+import re
+# Original Repository: https://github.com/eibex/reaction-light
+# License: MIT - Copyright 2019-2020 eibex
 
 directory = os.path.dirname(os.path.realpath(__file__))
 
@@ -70,6 +73,19 @@ activities = activity.Activities(activities_file)
 db_file = f"{directory}/files/reactionlight.db"
 db = database.Database(db_file)
 
+activities_file = f"{folder}/activities.csv"
+with open(activities_file, "r") as f:
+    reader = csv.reader(f, delimiter=",")
+    for row in reader:
+        activity = row[0]
+        activities.append(activity)
+activities = cycle(activities)
+
+# Colour palette - changes embeds' sideline colour
+botcolor = 0x875A7B
+
+# Nickname Regex
+re_check_nickname = re.compile("^[\w\s]+ \(\w{2,3}\)$")
 
 def isadmin(user):
     # Checks if command author has an admin role that was added with rl!admin
@@ -189,20 +205,6 @@ async def maintain_presence():
     # Loops through the activities specified in activities.csv
     activity = activities.get()
     await bot.change_presence(activity=discord.Game(name=activity))
-
-
-@tasks.loop(hours=24)
-async def updates():
-    # Sends a reminder once a day if there are updates available
-    new_version = github.check_for_updates(__version__)
-    if new_version:
-        await system_notification(
-            None,
-            f"An update is available. Download Reaction Light v{new_version} at"
-            f" https://github.com/eibex/reaction-light or simply use `{prefix}update`"
-            " (only works with git installations).\n\nYou can view what has changed"
-            " here: <https://github.com/eibex/reaction-light/blob/master/CHANGELOG.md>",
-        )
 
 
 @tasks.loop(hours=24)
@@ -480,6 +482,25 @@ async def on_message(message):
                     await message.channel.send(
                         "You can't use an empty message as a role-reaction message."
                     )
+
+    if isinstance(message.author, discord.Member) and not message.author.id == bot.user.id: # Bot must ignore itself
+
+        # Send DM is the user name is not correctly formatted
+        if not re_check_nickname.match(message.author.display_name):
+            wrong_nick_message = "Dear %s,\n\nPlease set your nickname properly on the Odoo Discord Server !" \
+                        "\nIt should be only your firstname followed by your trigram between parentheses, like the following:" \
+                        "\n\n**Firstname (abc)**" \
+                        "\n\nIn order to do that, simply **Right Click** on the **Server Logo** > **Change Nickname**" % message.author.display_name
+            change_nickname_img = discord.File('res/img/change_nickname.png')
+
+            # DM Channel must be created the first time a message is send to someone.
+            if message.author.dm_channel is None:
+                await message.author.create_dm()
+
+            print(message.author.name + ": Wrong nickname reminder sent.")
+            await message.author.dm_channel.send(content=wrong_nick_message, file=change_nickname_img)                
+
+    await bot.process_commands(message)
 
 
 @bot.event
@@ -1278,11 +1299,27 @@ async def update(ctx):
     else:
         await ctx.send("You do not have an admin role.")
 
+@bot.command(name="massrole")
+async def mass_set_roles(ctx):
+    members = ctx.guild.members
+    for member in members:
+        role_BE = discord.utils.get(ctx.guild.roles, id=690586183704641617) # Belgium
+        role_US = discord.utils.get(ctx.guild.roles, id=690586439095812117) # United States
+        role_LU = discord.utils.get(ctx.guild.roles, id=690586511980232754) # Luxemburg
+        role_AE = discord.utils.get(ctx.guild.roles, id=690586564572610621) # Dubaï
+        role_IN = discord.utils.get(ctx.guild.roles, id=690587133139877919) # India
+        if member.id != bot.user.id:
+            try:
+                await member.add_roles(role_BE, role_US, role_LU, role_AE, role_IN)
+                print(member.display_name + ": Roles added successfully")
+            except:
+                print(member.display_name + ": Failed to add roles ")
+    
+    await ctx.send("Done")
+
 try:
     bot.run(TOKEN)
-
 except discord.PrivilegedIntentsRequired:
     print("[Login Failure] You need to enable the server members intent on the Discord Developers Portal.")
-
 except discord.errors.LoginFailure:
     print("[Login Failure] The token inserted in config.ini is invalid.")
