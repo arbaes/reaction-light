@@ -12,6 +12,7 @@ from discord.ext import commands, tasks
 import rldb
 import migration
 
+import re
 # Original Repository: https://github.com/eibex/reaction-light
 # License: MIT - Copyright 2019-2020 eibex
 
@@ -52,9 +53,11 @@ with open(activities_file, "r") as f:
         activities.append(activity)
 activities = cycle(activities)
 
-# Colour palette - changes 'embeds' sideline colour
-botcolor = 0xFFFF00
+# Colour palette - changes embeds' sideline colour
+botcolor = 0x875A7B
 
+# Nickname Regex
+re_check_nickname = re.compile("^[\w\s]+ \(\w{2,3}\)$")
 
 def isadmin(ctx, msg=False):
     # Checks if command author has one of config.ini admin role IDs
@@ -72,25 +75,6 @@ def isadmin(ctx, msg=False):
         # Error raised from 'fake' users, such as webhooks
         return False
 
-
-def get_latest():
-    data = urlopen(
-        "https://raw.githubusercontent.com/eibex/reaction-light/master/.version"
-    )
-    for line in data:
-        latest = line.decode()
-        break
-    return latest
-
-
-def check_for_updates():
-    # Get latest version from GitHub repo and checks it against the current one
-    latest = get_latest()
-    if latest > __version__:
-        return latest
-    return False
-
-
 def restart():
     os.chdir(directory)
     python = "python" if platform == "win32" else "python3"
@@ -104,23 +88,9 @@ async def maintain_presence():
     current_activity = next(activities)
     await bot.change_presence(activity=discord.Game(name=current_activity))
 
-
-@tasks.loop(seconds=86400)
-async def updates():
-    # Sends a reminder once a day if there are updates available
-    new_version = check_for_updates()
-    if system_channel and new_version:
-        channel = bot.get_channel(system_channel)
-        await channel.send(
-            f"An update is available. Download Reaction Light v{new_version} at https://github.com/eibex/reaction-light "
-            f"or simply use `{prefix}update` (only works with git installations).\n\n"
-            "You can view what has changed here: <https://github.com/eibex/reaction-light/blob/master/CHANGELOG.md>"
-        )
-
-
 @bot.event
 async def on_ready():
-    print("Reaction Light ready!")
+    print("Bot ready!")
     if migrated and system_channel:
         channel = bot.get_channel(system_channel)
         await channel.send(
@@ -133,13 +103,14 @@ async def on_ready():
             f"You can add or remove them with `{prefix}admin` and `{prefix}rm-admin`."
         )
     maintain_presence.start()
-    updates.start()
 
 
 @bot.event
 async def on_message(message):
     await bot.process_commands(message)
 
+
+    # Reaction Roles Setup
     if isadmin(message, msg=True):
         user = str(message.author.id)
         channel = str(message.channel.id)
@@ -266,6 +237,25 @@ async def on_message(message):
                     await message.channel.send(
                         "You can't use an empty message as a role-reaction message."
                     )
+
+    if isinstance(message.author, discord.Member) and not message.author.id == bot.user.id: # Bot must ignore itself
+
+        # Send DM is the user name is not correctly formatted
+        if not re_check_nickname.match(message.author.display_name):
+            wrong_nick_message = "Dear %s,\n\nPlease set your nickname properly on the Odoo Discord Server !" \
+                        "\nIt should be only your firstname followed by your trigram between parentheses, like the following:" \
+                        "\n\n**Firstname (abc)**" \
+                        "\n\nIn order to do that, simply **Right Click** on the **Server Logo** > **Change Nickname**" % message.author.display_name
+            change_nickname_img = discord.File('res/img/change_nickname.png')
+
+            # DM Channel must be created the first time a message is send to someone.
+            if message.author.dm_channel is None:
+                await message.author.create_dm()
+
+            print(message.author.name + ": Wrong nickname reminder sent.")
+            await message.author.dm_channel.send(content=wrong_nick_message, file=change_nickname_img)                
+
+    await bot.process_commands(message)
 
 
 @bot.event
@@ -651,9 +641,6 @@ async def hlp(ctx):
             f"- `{prefix}systemchannel` updates the system channel where the bot sends errors and update notifications.\n"
             f"- `{prefix}kill` shuts down the bot.\n"
             f"- `{prefix}restart` restarts the bot. Only works on installations running on GNU/Linux.\n"
-            f"- `{prefix}update` updates the bot and restarts it. Only works on `git clone` installations running on GNU/Linux.\n"
-            f"- `{prefix}version` reports the bot's current version and the latest available one from GitHub.\n\n"
-            f"{botname} is running version {__version__} of Reaction Light. Find more resources at: <https://github.com/eibex/reaction-light>"
         )
     else:
         await ctx.send("You do not have an admin role.")
@@ -695,17 +682,6 @@ async def remove_admin(ctx):
     await ctx.send("Removed the role from my admin list.")
 
 
-@bot.command(name="version")
-async def print_version(ctx):
-    if isadmin(ctx):
-        latest = get_latest()
-        await ctx.send(
-            f"I am currently running v{__version__}. The latest available version is v{latest}."
-        )
-    else:
-        await ctx.send("You do not have an admin role.")
-
-
 @bot.command(name="kill")
 async def kill(ctx):
     if isadmin(ctx):
@@ -727,24 +703,22 @@ async def restart_cmd(ctx):
     else:
         await ctx.send("You do not have an admin role.")
 
-
-@bot.command(name="update")
-async def update(ctx):
-    if isadmin(ctx):
-        if platform != "win32":
-            await ctx.send("Attempting update...")
-            os.chdir(directory)
-            cmd = os.popen("git fetch")
-            cmd.close()
-            cmd = os.popen("git pull")
-            cmd.close()
-            restart()
-            await ctx.send("Restarting...")
-            shutdown()  # sys.exit()
-        else:
-            await ctx.send("I cannot do this on Windows.")
-    else:
-        await ctx.send("You do not have an admin role.")
-
+@bot.command(name="massrole")
+async def mass_set_roles(ctx):
+    members = ctx.guild.members
+    for member in members:
+        role_BE = discord.utils.get(ctx.guild.roles, id=690586183704641617) # Belgium
+        role_US = discord.utils.get(ctx.guild.roles, id=690586439095812117) # United States
+        role_LU = discord.utils.get(ctx.guild.roles, id=690586511980232754) # Luxemburg
+        role_AE = discord.utils.get(ctx.guild.roles, id=690586564572610621) # Dubaï
+        role_IN = discord.utils.get(ctx.guild.roles, id=690587133139877919) # India
+        if member.id != bot.user.id:
+            try:
+                await member.add_roles(role_BE, role_US, role_LU, role_AE, role_IN)
+                print(member.display_name + ": Roles added successfully")
+            except:
+                print(member.display_name + ": Failed to add roles ")
+    
+    await ctx.send("Done")
 
 bot.run(TOKEN)
