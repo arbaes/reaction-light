@@ -56,8 +56,12 @@ activities = cycle(activities)
 # Colour palette - changes embeds' sideline colour
 botcolor = 0x875A7B
 
-# Nickname Regex
+# Nickname Settings
 re_check_nickname = re.compile("^[\w\s]+ \(\w{2,3}\)$")
+ignored_user_ids = [
+    691573556642840587, # OdooBot a.k.a. Odoo Discord SuperUser
+]
+
 
 def isadmin(ctx, msg=False):
     # Checks if command author has one of config.ini admin role IDs
@@ -238,7 +242,7 @@ async def on_message(message):
                         "You can't use an empty message as a role-reaction message."
                     )
 
-    if isinstance(message.author, discord.Member) and not message.author.id == bot.user.id: # Bot must ignore itself
+    if isinstance(message.author, discord.Member) and message.author.id not in [bot.user.id] + ignored_user_ids:
 
         # Send DM is the user name is not correctly formatted
         if not re_check_nickname.match(message.author.display_name):
