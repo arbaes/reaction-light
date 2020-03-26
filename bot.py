@@ -57,7 +57,7 @@ activities = cycle(activities)
 botcolor = 0x875A7B
 
 # Nickname Settings
-re_check_nickname = re.compile("^[\w\s]+ \(\w{2,3}\)$")
+re_check_nickname = re.compile(r"^[\w\s\u00C0-\u017F-]+ \([a-zA-Z]{2,3}\)(\s.)?$")
 ignored_user_ids = [
     691573556642840587, # OdooBot a.k.a. Odoo Discord SuperUser
 ]
@@ -256,8 +256,8 @@ async def on_message(message):
             if message.author.dm_channel is None:
                 await message.author.create_dm()
 
-            print(message.author.name + ": Wrong nickname reminder sent.")
-            await message.author.dm_channel.send(content=wrong_nick_message, file=change_nickname_img)                
+            print(message.author.display_name + ": Wrong nickname reminder sent. (Login: " + message.author.name + ")." )
+            await message.author.dm_channel.send(content=wrong_nick_message, file=change_nickname_img)
 
     await bot.process_commands(message)
 
