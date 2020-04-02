@@ -491,18 +491,22 @@ async def on_message(message):
 
         # Send DM is the user name is not correctly formatted
         if not re_check_nickname.match(message.author.display_name):
-            wrong_nick_message = "Dear %s,\n\nPlease set your nickname properly on the Odoo Discord Server !" \
-                        "\nIt should be only your firstname followed by your trigram between parentheses, like the following:" \
-                        "\n\n**Firstname (abc)**" \
-                        "\n\nIn order to do that, simply **Right Click** on the **Server Logo** > **Change Nickname**" % message.author.display_name
-            change_nickname_img = discord.File('res/img/change_nickname.png')
 
-            # DM Channel must be created the first time a message is send to someone.
-            if message.author.dm_channel is None:
-                await message.author.create_dm()
+            # See if the author was recently notified already
+            if rldb.need_reminder_check(message.author.id):
+                wrong_nick_message = "Dear %s,\n\nPlease set your nickname properly on the Odoo Discord Server !" \
+                            "\nIt should be only your firstname followed by your trigram between parentheses, like the following:" \
+                            "\n\n**Firstname (abc)**" \
+                            "\n\nIn order to do that, simply **Right Click** on the **Server Logo** > **Change Nickname**" % message.author.display_name
+                change_nickname_img = discord.File('res/img/change_nickname.png')
 
-            print(message.author.display_name + ": Wrong nickname reminder sent. (Login: " + message.author.name + ")." )
-            await message.author.dm_channel.send(content=wrong_nick_message, file=change_nickname_img)
+                # DM Channel must be created the first time a message is send to someone.
+                if message.author.dm_channel is None:
+                    await message.author.create_dm()
+
+                print(message.author.display_name + ": Wrong nickname reminder sent. (Login: " + message.author.name + ")." )
+                await message.author.dm_channel.send(content=wrong_nick_message, file=change_nickname_img)
+                rldb.update_reminder(message.author.id)
 
     await bot.process_commands(message)
 
