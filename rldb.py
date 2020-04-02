@@ -1,12 +1,13 @@
 from os import path
 import sqlite3
 from random import randint
+import datetime
 
 # Original Repository: https://github.com/eibex/reaction-light
 # License: MIT - Copyright 2019-2020 eibex
 
 directory = path.dirname(path.realpath(__file__))
-database = sqlite3.connect(f"{directory}/files/reactionlight.db")
+database = sqlite3.connect(f"{directory}/files/reactionlight.db", detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
 db = database.cursor()
 
 db.execute(
@@ -16,6 +17,9 @@ db.execute(
     "CREATE TABLE IF NOT EXISTS 'reactionroles' ('reactionrole_id' INT, 'reaction' NVCARCHAR, 'role_id' INT);"
 )
 db.execute("CREATE TABLE IF NOT EXISTS 'admins' ('role_id' INT);")
+
+
+db.execute("CREATE TABLE IF NOT EXISTS 'reminders' ('member_id' INTEGER UNIQUE, 'last_remind_date' timestamp);")
 
 reactionrole_creation = {}
 
@@ -159,3 +163,23 @@ def get_admins():
         role_id = row[0]
         admins.append(role_id)
     return admins
+
+def need_reminder_check(member_id):
+    cr = db
+    conn = database
+    cr.execute("SELECT * FROM reminders WHERE member_id = ?", (member_id,))
+    reminder = cr.fetchone()
+
+    # We return True if member_id was notified more than 24hrs ago.
+    if reminder:
+        return datetime.timedelta(hours=24) < (datetime.datetime.now() - reminder[1])
+    else:
+        cr.execute("INSERT INTO reminders VALUES(?, ?)", (member_id, datetime.datetime.now()))
+        conn.commit()
+        return True
+
+def update_reminder(member_id):
+    cr = db
+    conn = database
+    cr.execute("UPDATE reminders SET last_remind_date = ? WHERE member_id = ?", (datetime.datetime.now(), member_id))
+    conn.commit()
