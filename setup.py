@@ -25,7 +25,7 @@ print(
 
 while True:
     token = input(
-        "\nPaste the token of your bot user (you can create one at: https://discordapp.com/developers/applications/)  "
+        "\nPaste the token of your bot user (you can create one at: https://discord.com/developers/applications/)  "
     )
     if token.lower() == "help":
         print(
